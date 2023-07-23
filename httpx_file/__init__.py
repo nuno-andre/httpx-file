@@ -1,9 +1,10 @@
+from typing import Optional, Tuple
 from pathlib import Path
 
 import aiofiles
 import httpx
 
-__version__ = 0, 0, 3
+__version__ = 0, 1, 0
 
 
 # monkey patch to fix httpx URL parsing
@@ -24,33 +25,39 @@ from httpx import (
     BaseTransport,
     ByteStream,
     Client as _Client,
-    AsyncClient as _AsyncClient, Request, Response
+    AsyncClient as _AsyncClient,
+    Request,
+    Response,
 )
 
 
-class FileTransport(BaseTransport):
-    """Transport for file URIs."""
+class FileTransport(AsyncBaseTransport, BaseTransport):
+    '''Transport for file URIs.
+    '''
 
-    def handle_request(
-            self,
-            request: Request) -> None:
-        status = None
-        headers = request.headers
-        method = request.method
-        scheme, host, port, path = request.url.scheme, request.url.host, request.url.port, request.url.path
+    def _handle(self, request: Request) -> Tuple[Optional[int], httpx.Headers]:
 
-        if host and host != 'localhost':
+        if request.url.host and request.url.host != 'localhost':
             raise NotImplementedError('Only local paths are allowed')
 
-        if method in ['PUT', 'DELETE']:
+        if request.method in {'PUT', 'DELETE'}:
             status = 501  # Not Implemented
 
-        elif method not in ['GET', 'HEAD']:
+        elif request.method not in {'GET', 'HEAD'}:
             # raise TransportError(f'Invalid request method: {method}')
             status = 405  # Method Not Allowed
 
+        else:
+            status = None
+
+        return status, request.headers
+
+    def handle_request(self, request: Request) -> Response:
+        status, headers = self._handle(request)
+        stream = None
+
         if not status:
-            parts = path.split('/')
+            parts = request.url.path.split('/')
 
             # check if it's a Windows absolute path
             if parts[1].endswith((':', '|')):
@@ -69,32 +76,20 @@ class FileTransport(BaseTransport):
             else:
                 stream = ByteStream(content)
                 headers['Content-Length'] = str(len(content))
-        extensions = {}
-        return Response(status_code=status, headers=headers, stream=stream, extensions=extensions)
 
+        return Response(
+            status_code=status,
+            headers=headers,
+            stream=stream,
+            extensions=dict(),
+        )
 
-class AsyncFileTransport(AsyncBaseTransport):
-
-    async def handle_async_request(
-            self,
-            request: Request) -> None:
-        status = None
-        headers = request.headers
-        method = request.method
-        scheme, host, port, path = request.url.scheme, request.url.host, request.url.port, request.url.path
-
-        if host and host != 'localhost':
-            raise NotImplementedError('Only local paths are allowed')
-
-        if method in ['PUT', 'DELETE']:
-            status = 501  # Not Implemented
-
-        elif method not in ['GET', 'HEAD']:
-            # raise TransportError(f'Invalid request method: {method}')
-            status = 405  # Method Not Allowed
+    async def handle_async_request(self, request: Request) -> Response:
+        status, headers = self._handle(request)
+        stream = None
 
         if not status:
-            parts = path.split('/')
+            parts = request.url.path.split('/')
 
             # check if it's a Windows absolute path
             if parts[1].endswith((':', '|')):
@@ -114,8 +109,13 @@ class AsyncFileTransport(AsyncBaseTransport):
             else:
                 stream = ByteStream(content)
                 headers['Content-Length'] = str(len(content))
-        extensions = {}
-        return Response(status_code=status, headers=headers, stream=stream, extensions=extensions)
+
+        return Response(
+            status_code=status,
+            headers=headers,
+            stream=stream,
+            extensions=dict(),
+        )
 
 
 class Client(_Client):
@@ -132,10 +132,10 @@ class AsyncClient(_AsyncClient):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.mount('file://', AsyncFileTransport())
+        self.mount('file://', FileTransport())
 
     def mount(self, protocol: str, transport: AsyncBaseTransport) -> None:
         self._mounts.update({URLPattern(protocol): transport})
 
 
-__all__ = ['FileTransport', 'AsyncFileTransport', 'AsyncClient', 'Client']
+__all__ = ['FileTransport', 'AsyncClient', 'Client']
