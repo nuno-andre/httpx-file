@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from httpx_file import Client, FileTransport, AsyncClient, AsyncFileTransport
 
 THIS = Path(__file__)
@@ -18,6 +20,7 @@ def test_adapter():
     assert client.get(THIS.as_uri()).content == THIS.read_bytes()
 
 
+@pytest.mark.asyncio
 async def test_async_client():
     async_client = AsyncClient()
     async_response = await async_client.get(THIS.as_uri())
@@ -25,6 +28,7 @@ async def test_async_client():
     assert async_response.content == THIS.read_bytes()
 
 
+@pytest.mark.asyncio
 async def test_async_adapter():
     mounts = {'file://': AsyncFileTransport()}
     async_client = AsyncClient(mounts=mounts)

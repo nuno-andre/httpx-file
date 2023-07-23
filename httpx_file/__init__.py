@@ -3,7 +3,7 @@ from pathlib import Path
 import aiofiles
 import httpx
 
-__version__ = 0, 0, 2, 'dev0'
+__version__ = 0, 0, 3
 
 
 # monkey patch to fix httpx URL parsing
@@ -15,8 +15,8 @@ def is_absolute_url(self):
     return not self.is_relative_url
 
 
-httpx.URL.is_relative_url = property(is_relative_url)
-httpx.URL.is_absolute_url = property(is_absolute_url)
+httpx.URL.is_relative_url = property(is_relative_url)  # type: ignore
+httpx.URL.is_absolute_url = property(is_absolute_url)  # type: ignore
 
 from httpx._utils import URLPattern
 from httpx import (
